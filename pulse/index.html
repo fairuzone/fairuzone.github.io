@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pulse Recovery</title>
+<meta name="description" content="Private recovery, sleep and mood tracker with calm and focus tools. Data stays on your device.">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+:root{
+  --bg:#f4f5f7; --card:#ffffff; --ink:#15171c; --muted:#666c78; --line:#e3e5ea;
+  --accent:#2f7df6; --green:#1f9d55; --yellow:#c98a00; --red:#d64545; --soft:#eef3fe;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1115; --card:#181b21; --ink:#eceef2; --muted:#9aa1ad; --line:#2a2e36;
+    --accent:#5b9bff; --green:#3cc47c; --yellow:#e7b236; --red:#ff6b6b; --soft:#1d2532;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1115; --card:#181b21; --ink:#eceef2; --muted:#9aa1ad; --line:#2a2e36;
+  --accent:#5b9bff; --green:#3cc47c; --yellow:#e7b236; --red:#ff6b6b; --soft:#1d2532;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:84px}
+main{max-width:640px;margin:0 auto;padding:16px}
+h1{font-size:1.35rem;margin:4px 0 2px}
+h2{font-size:1.05rem;margin:0 0 10px}
+p{margin:6px 0}
+.muted{color:var(--muted);font-size:.9rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{display:block;font-size:.85rem;color:var(--muted);margin-bottom:4px}
+input,textarea,select{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
+textarea{min-height:64px;resize:vertical}
+button{font:inherit;border:0;border-radius:12px;padding:11px 16px;background:var(--accent);color:#fff;cursor:pointer}
+button.ghost{background:var(--soft);color:var(--ink)}
+button.small{padding:6px 10px;font-size:.85rem}
+button:disabled{opacity:.5}
+.scale{display:flex;gap:6px}
+.scale button{flex:1;padding:10px 0;background:var(--soft);color:var(--ink)}
+.scale button.on{background:var(--accent);color:#fff}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+nav button{background:none;color:var(--muted);flex:1;padding:6px 0;font-size:.78rem;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button span{font-size:1.25rem}
+nav button.on{color:var(--accent)}
+.tab{display:none}.tab.on{display:block}
+.ringwrap{display:flex;gap:16px;align-items:center}
+.ring{width:120px;height:120px;flex:none}
+.big{font-size:2rem;font-weight:700}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:.8rem;font-weight:600}
+ul.tips{margin:6px 0;padding-left:20px}
+ul.tips li{margin:4px 0}
+.pacer{width:220px;height:220px;margin:16px auto;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;position:relative}
+.pacer .dot{position:absolute;width:100%;height:100%;border-radius:50%;background:var(--accent);opacity:.25;transform:scale(.4);transition-property:transform;transition-timing-function:ease-in-out}
+.pacer .lbl{position:relative;font-size:1.2rem;font-weight:600;text-align:center}
+.task{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.task:last-child{border-bottom:0}
+.task input{width:auto}
+.task.done span{text-decoration:line-through;color:var(--muted)}
+.task span{flex:1}
+.now{font-size:1.3rem;font-weight:700;padding:14px;border-radius:12px;background:var(--soft);text-align:center}
+.timer{font-size:3rem;font-weight:700;text-align:center;font-variant-numeric:tabular-nums;margin:8px 0}
+svg text{fill:var(--muted);font-size:10px}
+.insight{padding:8px 0;border-bottom:1px solid var(--line)}
+.insight:last-child{border-bottom:0}
+.legend{display:flex;gap:14px;font-size:.85rem;color:var(--muted)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;opacity:0;transition:opacity .25s;pointer-events:none}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<main>
+  <header class="row" style="justify-content:space-between">
+    <div><h1>Pulse</h1><div class="muted" id="today-date"></div></div>
+  </header>
+
+  <!-- TODAY -->
+  <section class="tab on" id="tab-today">
+    <div class="card" id="recovery-card">
+      <div class="ringwrap">
+        <svg class="ring" viewBox="0 0 120 120" aria-hidden="true">
+          <circle cx="60" cy="60" r="50" fill="none" stroke="var(--line)" stroke-width="12"/>
+          <circle id="ring-arc" cx="60" cy="60" r="50" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 400" transform="rotate(-90 60 60)"/>
+        </svg>
+        <div>
+          <div class="muted">Recovery</div>
+          <div class="big" id="rec-num">--</div>
+          <div id="rec-pill"></div>
+        </div>
+      </div>
+      <div id="rec-breakdown" class="muted" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card" id="plan-card" hidden>
+      <h2>Today's plan</h2>
+      <ul class="tips" id="plan"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Morning check-in</h2>
+      <p class="muted">Copy last night's numbers from the OHealth app. Leave a field empty if you don't have it.</p>
+      <div class="grid2" style="margin-top:10px">
+        <div><label for="f-sleep">Sleep (hours)</label><input id="f-sleep" type="number" step="0.1" min="0" max="16" inputmode="decimal" placeholder="7.2"></div>
+        <div><label for="f-sscore">Sleep score (0–100)</label><input id="f-sscore" type="number" min="0" max="100" inputmode="numeric" placeholder="optional"></div>
+        <div><label for="f-hrv">HRV (ms)</label><input id="f-hrv" type="number" min="5" max="300" inputmode="numeric" placeholder="45"></div>
+        <div><label for="f-rhr">Resting HR (bpm)</label><input id="f-rhr" type="number" min="30" max="130" inputmode="numeric" placeholder="62"></div>
+      </div>
+      <h2 style="margin-top:16px">How are you, honestly?</h2>
+      <div id="scales"></div>
+      <label for="f-meds" style="margin-top:12px">Took meds / supplements today?</label>
+      <select id="f-meds"><option value="">—</option><option value="yes">Yes</option><option value="no">No</option><option value="na">Not applicable</option></select>
+      <label for="f-strain" style="margin-top:12px">Exercise yesterday</label>
+      <select id="f-strain"><option value="">—</option><option value="0">Rest</option><option value="1">Light (walk, stretching)</option><option value="2">Moderate (30–60 min)</option><option value="3">Hard (intense or long)</option></select>
+      <label for="f-note" style="margin-top:12px">Note (what's on your mind?)</label>
+      <textarea id="f-note" placeholder="Optional"></textarea>
+      <div class="row" style="margin-top:12px"><button id="save">Save check-in</button><span class="muted" id="saved-at"></span></div>
+    </div>
+  </section>
+
+  <!-- CALM -->
+  <section class="tab" id="tab-calm">
+    <div class="card">
+      <h2>Breathe</h2>
+      <p class="muted">Slow breathing calms your nervous system and can raise HRV. Your phone vibrates when each phase changes, so you can close your eyes.</p>
+      <label for="b-mode" style="margin-top:10px">Pattern</label>
+      <select id="b-mode">
+        <option value="reso">Resonance: 5.5 s in / 5.5 s out (daily HRV training)</option>
+        <option value="box">Box: 4 in / 4 hold / 4 out / 4 hold (focus, anxiety)</option>
+        <option value="478">4-7-8: 4 in / 7 hold / 8 out (sleep, panic)</option>
+        <option value="sigh">Physiological sigh: 2 in + 1 top-up / 6 out (fast relief)</option>
+      </select>
+      <label for="b-min" style="margin-top:10px">Minutes</label>
+      <select id="b-min"><option>1</option><option selected>3</option><option>5</option><option>10</option></select>
+      <div class="pacer"><div class="dot" id="b-dot"></div><div class="lbl" id="b-lbl">Ready</div></div>
+      <div class="row" style="justify-content:center"><button id="b-go">Start</button></div>
+    </div>
+    <div class="card">
+      <h2>5-4-3-2-1 grounding</h2>
+      <p class="muted">For anxiety spirals or panic. Name each one slowly, out loud or in your head.</p>
+      <div class="now" id="g-step" style="margin-top:10px">Tap to begin</div>
+      <div class="row" style="justify-content:center;margin-top:10px"><button class="ghost" id="g-next">Next</button></div>
+    </div>
+    <div class="card">
+      <h2>Thought check</h2>
+      <p class="muted">A short CBT exercise. Write the thought down, then question it.</p>
+      <label for="t-thought" style="margin-top:8px">The thought</label><textarea id="t-thought" placeholder="e.g. I'm going to mess this up"></textarea>
+      <label for="t-for" style="margin-top:8px">Evidence it's true</label><textarea id="t-for"></textarea>
+      <label for="t-against" style="margin-top:8px">Evidence it's not the whole story</label><textarea id="t-against"></textarea>
+      <label for="t-friend" style="margin-top:8px">What would I tell a friend thinking this?</label><textarea id="t-friend"></textarea>
+      <div class="row" style="margin-top:10px"><button id="t-save">Save to journal</button></div>
+    </div>
+    <div class="card">
+      <h2>If it's too much right now</h2>
+      <p>You don't have to handle it alone. In Malaysia:</p>
+      <ul class="tips">
+        <li><b>Befrienders KL</b> (24 hours): <a href="tel:+60376272929">03-7627 2929</a></li>
+        <li><b>Talian Kasih</b>: <a href="tel:15999">15999</a></li>
+        <li><b>Emergency</b>: <a href="tel:999">999</a></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- FOCUS -->
+  <section class="tab" id="tab-focus">
+    <div class="card">
+      <h2>One thing now</h2>
+      <div class="now" id="now-task">Add a task below</div>
+    </div>
+    <div class="card">
+      <h2>Break it down</h2>
+      <p class="muted">Feeling stuck usually means the step is too big. Write the task, then add steps small enough to start in 2 minutes.</p>
+      <label for="task-big" style="margin-top:8px">Big task</label>
+      <input id="task-big" placeholder="e.g. Reply to supplier emails">
+      <div class="row" style="margin-top:8px">
+        <input id="task-step" placeholder="Tiny first step… (Enter to add)" style="flex:1">
+        <button id="task-add" class="small">Add</button>
+      </div>
+      <div id="tasks" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:8px"><button class="ghost small" id="task-clear">Clear finished</button></div>
+    </div>
+    <div class="card">
+      <h2>Focus timer</h2>
+      <div class="row">
+        <button class="ghost small" data-min="5">5 min</button>
+        <button class="ghost small" data-min="15">15 min</button>
+        <button class="ghost small" data-min="25">25 min</button>
+        <button class="ghost small" data-min="45">45 min</button>
+      </div>
+      <div class="timer" id="timer">15:00</div>
+      <label class="row" style="color:var(--ink);font-size:.95rem"><input type="checkbox" id="nudge" style="width:auto" checked> Vibrate every 5 min ("still on task?")</label>
+      <div class="row" style="justify-content:center;margin-top:10px">
+        <button id="t-go">Start</button><button class="ghost" id="t-reset">Reset</button>
+      </div>
+      <p class="muted" style="text-align:center">Sessions today: <b id="sessions">0</b></p>
+    </div>
+  </section>
+
+  <!-- TRENDS -->
+  <section class="tab" id="tab-trends">
+    <div class="card">
+      <h2>Last 14 days</h2>
+      <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>Recovery</span><span><i class="sw" style="background:var(--green)"></i>Mood</span><span><i class="sw" style="background:var(--red)"></i>Anxiety</span></div>
+      <svg id="chart" viewBox="0 0 320 160" width="100%" role="img" aria-label="Recovery, mood and anxiety over the last 14 days"></svg>
+    </div>
+    <div class="card">
+      <h2>What affects you</h2>
+      <p class="muted">Patterns from your own data. They get more reliable after about 2 weeks of check-ins.</p>
+      <div id="insights"></div>
+    </div>
+    <div class="card">
+      <h2>Journal</h2>
+      <div id="journal" class="muted">No entries yet.</div>
+    </div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="tab" id="tab-me">
+    <div class="card">
+      <h2>Settings</h2>
+      <label for="s-target">Sleep target (hours)</label>
+      <input id="s-target" type="number" step="0.5" min="5" max="11" value="8">
+      <label for="s-theme" style="margin-top:10px">Theme</label>
+      <select id="s-theme"><option value="">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select>
+    </div>
+    <div class="card">
+      <h2>Your data</h2>
+      <p class="muted">Everything is stored only in this browser. Nothing is sent anywhere. Back up regularly, because clearing browser data deletes it.</p>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="d-export">Back up (JSON)</button>
+        <button class="ghost" id="d-csv">Export CSV</button>
+        <button class="ghost" id="d-import">Restore</button>
+        <input type="file" id="d-file" accept="application/json" hidden>
+      </div>
+      <div class="row" style="margin-top:10px"><button class="ghost small" id="d-wipe" style="color:var(--red)">Delete all data</button></div>
+    </div>
+    <div class="card">
+      <h2>How recovery is calculated</h2>
+      <p class="muted">After 3 or more check-ins, your HRV and resting HR are compared with your own rolling 30-day baseline. HRV above your normal and resting HR below it both mean better recovery. Sleep is compared with your target, and hard exercise the day before lowers the score a little. Weights: HRV 45%, sleep 35%, resting HR 20%. This is a wellness estimate, not a medical device.</p>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button class="on" data-tab="today"><span>◎</span>Today</button>
+  <button data-tab="calm"><span>≈</span>Calm</button>
+  <button data-tab="focus"><span>◉</span>Focus</button>
+  <button data-tab="trends"><span>↗</span>Trends</button>
+  <button data-tab="me"><span>⚙</span>Me</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const KEY = 'pulse.v1';
+
+// ---------- storage ----------
+function load(){
+  try { const d = JSON.parse(localStorage.getItem(KEY)); if (d && d.days) return d; } catch(e){}
+  return { days:{}, journal:[], tasks:{big:'',steps:[]}, settings:{target:8, theme:''}, focus:{} };
+}
+let db = load();
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(db)); } catch(e){ toast('Could not save — storage blocked'); } }
+
+const dayKey = (d=new Date()) => { const z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`; };
+const today = dayKey();
+const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const mean = a => a.reduce((s,x)=>s+x,0)/a.length;
+
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(toast.t); toast.t=setTimeout(()=>t.classList.remove('on'),1800); }
+function vibe(p){ try { navigator.vibrate && navigator.vibrate(p); } catch(e){} }
+let wake=null;
+async function keepAwake(on){
+  try {
+    if (on && 'wakeLock' in navigator) wake = await navigator.wakeLock.request('screen');
+    else if (!on && wake){ await wake.release(); wake=null; }
+  } catch(e){}
+}
+
+// ---------- theme ----------
+function applyTheme(){ const t=db.settings.theme; if (t) document.documentElement.dataset.theme=t; else delete document.documentElement.dataset.theme; }
+applyTheme();
+
+// ---------- nav ----------
+$$('nav button').forEach(b => b.addEventListener('click', () => {
+  $$('nav button').forEach(x=>x.classList.toggle('on', x===b));
+  $$('.tab').forEach(t=>t.classList.toggle('on', t.id==='tab-'+b.dataset.tab));
+  if (b.dataset.tab==='trends') renderTrends();
+  window.scrollTo(0,0);
+}));
+$('#today-date').textContent = new Date().toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long'});
+
+// ---------- check-in scales ----------
+const SCALES = [
+  ['mood','Mood','😞','😄'],
+  ['energy','Energy','drained','charged'],
+  ['anxiety','Anxiety','calm','very anxious'],
+  ['focus','Focus','scattered','sharp'],
+];
+const scaleBox = $('#scales');
+SCALES.forEach(([k,name,lo,hi]) => {
+  const w = document.createElement('div');
+  w.style.marginTop='10px';
+  w.innerHTML = `<label>${name} <span style="float:right">${lo} → ${hi}</span></label><div class="scale" data-k="${k}">${[1,2,3,4,5].map(n=>`<button type="button" data-v="${n}">${n}</button>`).join('')}</div>`;
+  scaleBox.appendChild(w);
+});
+const picks = {};
+scaleBox.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const k = b.parentElement.dataset.k, v = +b.dataset.v;
+  picks[k] = picks[k]===v ? null : v;
+  b.parentElement.querySelectorAll('button').forEach(x=>x.classList.toggle('on', +x.dataset.v===picks[k]));
+});
+
+function fillForm(){
+  const d = db.days[today] || {};
+  $('#f-sleep').value = d.sleep ?? ''; $('#f-sscore').value = d.sscore ?? '';
+  $('#f-hrv').value = d.hrv ?? ''; $('#f-rhr').value = d.rhr ?? '';
+  $('#f-meds').value = d.meds ?? ''; $('#f-strain').value = d.strain ?? '';
+  $('#f-note').value = d.note ?? '';
+  SCALES.forEach(([k]) => { picks[k]=d[k]??null; $$(`.scale[data-k="${k}"] button`).forEach(x=>x.classList.toggle('on', +x.dataset.v===picks[k])); });
+  $('#saved-at').textContent = d.savedAt ? 'Saved ' + new Date(d.savedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+}
+
+$('#save').addEventListener('click', () => {
+  const d = {
+    sleep:num($('#f-sleep').value), sscore:num($('#f-sscore').value),
+    hrv:num($('#f-hrv').value), rhr:num($('#f-rhr').value),
+    meds:$('#f-meds').value||null, strain:num($('#f-strain').value),
+    note:$('#f-note').value.trim()||null, savedAt:Date.now(),
+  };
+  SCALES.forEach(([k]) => d[k]=picks[k]??null);
+  db.days[today] = d; save(); fillForm(); renderToday(); toast('Saved');
+  vibe(30);
+});
+
+// ---------- recovery model ----------
+function baseline(key, field){
+  const vals = Object.keys(db.days).filter(k=>k<key).sort().slice(-30).map(k=>db.days[k][field]).filter(v=>v!=null);
+  return vals.length >= 3 ? { m: mean(vals), n: vals.length } : null;
+}
+function recovery(key){
+  const d = db.days[key]; if (!d) return null;
+  const parts = []; // [score, weight, label]
+  const target = db.settings.target || 8;
+  if (d.hrv != null){
+    const b = baseline(key,'hrv');
+    if (b){ const r = d.hrv / b.m; parts.push([clamp(50 + (r-1)*160, 0, 100), .45, `HRV ${d.hrv} ms vs your usual ${Math.round(b.m)}`]); }
+  }
+  if (d.rhr != null){
+    const b = baseline(key,'rhr');
+    if (b){ parts.push([clamp(60 + (b.m - d.rhr)*6, 0, 100), .20, `Resting HR ${d.rhr} vs your usual ${Math.round(b.m)}`]); }
+  }
+  if (d.sleep != null || d.sscore != null){
+    let s;
+    if (d.sleep != null){ s = clamp(d.sleep/target*100, 0, 100); if (d.sscore != null) s = (s + d.sscore)/2; }
+    else s = d.sscore;
+    parts.push([s, .35, d.sleep!=null ? `Sleep ${d.sleep} h of ${target} h target` : `Sleep score ${d.sscore}`]);
+  }
+  if (!parts.length) return null;
+  const w = parts.reduce((s,p)=>s+p[1],0);
+  let score = parts.reduce((s,p)=>s+p[0]*p[1],0)/w;
+  if (d.strain === 3) score -= 6; else if (d.strain === 2) score -= 2;
+  score = Math.round(clamp(score,1,99));
+  const learning = !baseline(key,'hrv') && !baseline(key,'rhr');
+  return { score, parts, learning };
+}
+const zone = s => s>=67 ? ['green','Recovered','var(--green)'] : s>=34 ? ['yellow','Moderate','var(--yellow)'] : ['red','Low — go easy','var(--red)'];
+
+function buildPlan(d, r){
+  const tips = [];
+  const z = r ? zone(r.score)[0] : null;
+  if (z==='green') tips.push('Your body is ready. It\'s a good day for a hard workout or your most demanding task.');
+  if (z==='yellow') tips.push('Moderate day. Do steady exercise (a brisk walk or easy cardio) and put deep work in the morning.');
+  if (z==='red') tips.push('Recovery is low. Choose rest or gentle movement, drink water, and aim for an earlier bedtime tonight. Low-recovery days often feel emotionally harder too, so be kind to yourself.');
+  if (d.sleep!=null && d.sleep < 6) tips.push('Short sleep makes anxiety and ADHD symptoms worse. Avoid caffeine after 2 pm and try a 15–20 min nap before 3 pm if you can.');
+  if ((d.anxiety??0) >= 4) tips.push('Anxiety is high. Do 3 minutes of resonance breathing now (Calm tab), and again before anything stressful.');
+  if ((d.mood??5) <= 2) tips.push('Mood is low. Pick one small thing that usually helps: 10 minutes outside in daylight, a message to someone you trust, or a short walk. Small actions come before motivation, not after.');
+  if ((d.focus??5) <= 2 || (d.energy??5) <= 2) tips.push('Focus is low. Use the Focus tab: choose ONE task, break it into tiny steps, and run a 5-minute timer just to start.');
+  if (d.meds==='no') tips.push('You marked meds as not taken. If they\'re prescribed, set a phone alarm now.');
+  if (!tips.length) tips.push('Log your mood and energy too, and the plan will adapt to how you feel, not just your body.');
+  return tips;
+}
+
+function renderToday(){
+  const d = db.days[today];
+  const r = recovery(today);
+  const arc = $('#ring-arc');
+  if (r){
+    const [, label, col] = zone(r.score);
+    arc.setAttribute('stroke-dasharray', `${(r.score/100)*314.16} 400`);
+    arc.setAttribute('stroke', col);
+    $('#rec-num').textContent = r.score + '%';
+    $('#rec-pill').innerHTML = `<span class="pill" style="background:${col};color:#fff">${label}</span>`;
+    $('#rec-breakdown').innerHTML = r.parts.map(p=>`• ${p[2]}`).join('<br>') + (r.learning ? '<br><i>Still learning your baseline. HRV and resting HR start counting after 3 check-ins.</i>' : '');
+  } else {
+    arc.setAttribute('stroke-dasharray','0 400');
+    $('#rec-num').textContent = '--';
+    $('#rec-pill').innerHTML = '';
+    $('#rec-breakdown').textContent = 'Do your morning check-in below to see today\'s recovery.';
+  }
+  if (d){ $('#plan-card').hidden=false; $('#plan').innerHTML = buildPlan(d,r).map(t=>`<li>${t}</li>`).join(''); }
+  else $('#plan-card').hidden = true;
+}
+
+// ---------- breathing ----------
+const PATTERNS = {
+  reso: [['Breathe in',5.5,1],['Breathe out',5.5,0]],
+  box:  [['Breathe in',4,1],['Hold',4,1],['Breathe out',4,0],['Hold',4,0]],
+  '478':[['Breathe in',4,1],['Hold',7,1],['Breathe out',8,0]],
+  sigh: [['Breathe in',2,.8],['Top-up in',1,1],['Long breath out',6,0]],
+};
+let bTimer=null, bEnd=0;
+function stopBreath(msg){
+  clearTimeout(bTimer); bTimer=null; keepAwake(false);
+  $('#b-go').textContent='Start'; $('#b-lbl').textContent = msg || 'Ready';
+  const dot=$('#b-dot'); dot.style.transitionDuration='1s'; dot.style.transform='scale(.4)';
+}
+$('#b-go').addEventListener('click', () => {
+  if (bTimer){ stopBreath(); return; }
+  const pat = PATTERNS[$('#b-mode').value];
+  bEnd = Date.now() + (+$('#b-min').value)*60000;
+  $('#b-go').textContent='Stop'; keepAwake(true);
+  let i=0;
+  const step = () => {
+    if (Date.now() >= bEnd){ vibe([80,80,80]); stopBreath('Done. Notice how you feel.'); return; }
+    const [lbl, sec, size] = pat[i % pat.length];
+    $('#b-lbl').textContent = lbl;
+    const dot=$('#b-dot'); dot.style.transitionDuration = sec+'s'; dot.style.transform = `scale(${.4 + size*.6})`;
+    vibe(lbl.startsWith('Hold') ? 25 : 60);
+    i++; bTimer = setTimeout(step, sec*1000);
+  };
+  step();
+});
+
+// ---------- grounding ----------
+const G = ['5 things you can SEE','4 things you can FEEL (feet on floor, fabric…)','3 things you can HEAR','2 things you can SMELL','1 thing you can TASTE','Take one slow breath. You are here, and you are safe right now.'];
+let gi=-1;
+$('#g-next').addEventListener('click', () => { gi=(gi+1)%(G.length+1); $('#g-step').textContent = gi===G.length ? 'Tap to begin again' : G[gi]; if (gi===G.length) gi=-1; vibe(20); });
+$('#g-step').addEventListener('click', () => $('#g-next').click());
+
+// ---------- thought journal ----------
+$('#t-save').addEventListener('click', () => {
+  const e = { at:Date.now(), thought:$('#t-thought').value.trim(), forr:$('#t-for').value.trim(), against:$('#t-against').value.trim(), friend:$('#t-friend').value.trim() };
+  if (!e.thought){ toast('Write the thought first'); return; }
+  db.journal.unshift(e); save();
+  ['#t-thought','#t-for','#t-against','#t-friend'].forEach(s=>$(s).value='');
+  toast('Saved to journal');
+});
+
+// ---------- tasks ----------
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function renderTasks(){
+  $('#task-big').value = db.tasks.big || '';
+  const box = $('#tasks');
+  box.innerHTML = db.tasks.steps.map((s,i)=>`<div class="task ${s.done?'done':''}"><input type="checkbox" data-i="${i}" ${s.done?'checked':''} aria-label="Done"><span>${esc(s.t)}</span><button class="ghost small" data-del="${i}" aria-label="Remove">✕</button></div>`).join('');
+  const next = db.tasks.steps.find(s=>!s.done);
+  $('#now-task').textContent = next ? next.t : (db.tasks.steps.length ? '🎉 All steps done!' : 'Add a task below');
+}
+function addStep(){
+  const v = $('#task-step').value.trim(); if (!v) return;
+  db.tasks.steps.push({t:v, done:false}); $('#task-step').value=''; save(); renderTasks();
+}
+$('#task-add').addEventListener('click', addStep);
+$('#task-step').addEventListener('keydown', e => { if (e.key==='Enter'){ e.preventDefault(); addStep(); } });
+$('#task-big').addEventListener('change', e => { db.tasks.big = e.target.value; save(); });
+$('#tasks').addEventListener('click', e => {
+  const c = e.target.closest('input[type=checkbox]'), del = e.target.closest('[data-del]');
+  if (c){ const s=db.tasks.steps[+c.dataset.i]; s.done=c.checked; if (s.done){ vibe([30,40,30]); toast('Nice — one down'); } }
+  else if (del){ db.tasks.steps.splice(+del.dataset.del,1); }
+  else return;
+  save(); renderTasks();
+});
+$('#task-clear').addEventListener('click', () => { db.tasks.steps = db.tasks.steps.filter(s=>!s.done); save(); renderTasks(); });
+
+// ---------- focus timer ----------
+let tLen=15*60, tLeft=tLen, tInt=null, tEndAt=0;
+const fmt = s => `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+function drawTimer(){ $('#timer').textContent = fmt(tLeft); $('#sessions').textContent = db.focus[today]||0; }
+$$('[data-min]').forEach(b => b.addEventListener('click', () => { if (tInt) return; tLen=tLeft=+b.dataset.min*60; drawTimer(); }));
+$('#t-go').addEventListener('click', () => {
+  if (tInt){ clearInterval(tInt); tInt=null; $('#t-go').textContent='Resume'; keepAwake(false); return; }
+  tEndAt = Date.now() + tLeft*1000; $('#t-go').textContent='Pause'; keepAwake(true); vibe(40);
+  let lastNudge = tLeft;
+  tInt = setInterval(() => {
+    tLeft = Math.max(0, Math.round((tEndAt-Date.now())/1000));
+    if ($('#nudge').checked && lastNudge - tLeft >= 300 && tLeft > 0){ lastNudge = tLeft; vibe(120); }
+    if (tLeft === 0){
+      clearInterval(tInt); tInt=null; keepAwake(false); vibe([200,100,200,100,200]);
+      db.focus[today] = (db.focus[today]||0)+1; save();
+      $('#t-go').textContent='Start'; tLeft=tLen; toast('Session done — take a 5 min break');
+    }
+    drawTimer();
+  }, 500);
+});
+$('#t-reset').addEventListener('click', () => { clearInterval(tInt); tInt=null; tLeft=tLen; $('#t-go').textContent='Start'; keepAwake(false); drawTimer(); });
+
+// ---------- trends ----------
+function lastDays(n){ const out=[]; for (let i=n-1;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); out.push(dayKey(d)); } return out; }
+function renderTrends(){
+  const keys = lastDays(14), W=320, H=160, L=24, B=20, T=8, cw=W-L-6, ch=H-B-T;
+  const x = i => L + i*(cw/(keys.length-1));
+  const y = v => T + ch - (v/100)*ch;
+  let s = '';
+  [0,50,100].forEach(v => s += `<line x1="${L}" x2="${W-6}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-4}" y="${y(v)+3}" text-anchor="end">${v}</text>`);
+  keys.forEach((k,i) => { if (i%2===0) s += `<text x="${x(i)}" y="${H-6}" text-anchor="middle">${+k.slice(8)}</text>`; });
+  const series = [
+    [k => recovery(k)?.score ?? null, 'var(--accent)'],
+    [k => db.days[k]?.mood!=null ? (db.days[k].mood-1)*25 : null, 'var(--green)'],
+    [k => db.days[k]?.anxiety!=null ? (db.days[k].anxiety-1)*25 : null, 'var(--red)'],
+  ];
+  series.forEach(([f,col]) => {
+    let path='', pen=false;
+    keys.forEach((k,i) => { const v=f(k); if (v==null){ pen=false; return; } path += (pen?'L':'M')+x(i).toFixed(1)+' '+y(v).toFixed(1)+' '; pen=true; s += `<circle cx="${x(i)}" cy="${y(v)}" r="2.5" fill="${col}"/>`; });
+    if (path) s += `<path d="${path}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round"/>`;
+  });
+  $('#chart').innerHTML = s;
+
+  // insights
+  const all = Object.keys(db.days).sort().map(k=>({k, ...db.days[k], rec: recovery(k)?.score ?? null}));
+  const ins = [];
+  const compare = (filterA, filterB, field, labelA, labelB, what) => {
+    const a = all.filter(filterA).map(d=>d[field]).filter(v=>v!=null);
+    const b = all.filter(filterB).map(d=>d[field]).filter(v=>v!=null);
+    if (a.length>=3 && b.length>=3){
+      const ma=mean(a), mb=mean(b);
+      if (Math.abs(ma-mb) >= 0.4) ins.push(`${what} averages <b>${ma.toFixed(1)}</b> ${labelA} vs <b>${mb.toFixed(1)}</b> ${labelB}.`);
+    }
+  };
+  const target = db.settings.target || 8;
+  compare(d=>d.sleep!=null && d.sleep>=7, d=>d.sleep!=null && d.sleep<6.5, 'mood', 'after 7 h+ sleep', 'after under 6.5 h', 'Your mood');
+  compare(d=>d.sleep!=null && d.sleep>=7, d=>d.sleep!=null && d.sleep<6.5, 'anxiety', 'after 7 h+ sleep', 'after under 6.5 h', 'Your anxiety');
+  compare(d=>d.sleep!=null && d.sleep>=7, d=>d.sleep!=null && d.sleep<6.5, 'focus', 'after 7 h+ sleep', 'after under 6.5 h', 'Your focus');
+  compare(d=>d.rec!=null && d.rec>=67, d=>d.rec!=null && d.rec<34, 'mood', 'on green days', 'on red days', 'Your mood');
+  compare(d=>d.strain!=null && d.strain>=1, d=>d.strain===0, 'mood', 'the day after exercise', 'after a rest day', 'Your mood');
+  compare(d=>d.strain!=null && d.strain>=1, d=>d.strain===0, 'anxiety', 'the day after exercise', 'after a rest day', 'Your anxiety');
+  compare(d=>d.meds==='yes', d=>d.meds==='no', 'focus', 'on med days', 'when missed', 'Your focus');
+  const streak = (() => { let n=0; const d=new Date(); for(;;){ if (db.days[dayKey(d)]) { n++; d.setDate(d.getDate()-1); } else break; } return n; })();
+  const slept = all.filter(d=>d.sleep!=null).slice(-7);
+  if (slept.length>=3) ins.unshift(`Average sleep over your last ${slept.length} logged nights: <b>${mean(slept.map(d=>d.sleep)).toFixed(1)} h</b> (target ${target} h).`);
+  ins.unshift(`Check-in streak: <b>${streak} day${streak===1?'':'s'}</b>. Total days logged: ${all.length}.`);
+  if (ins.length <= 2) ins.push('Keep checking in. Patterns linking sleep, exercise and meds to your mood, anxiety and focus will show up here.');
+  $('#insights').innerHTML = ins.map(t=>`<div class="insight">${t}</div>`).join('');
+
+  $('#journal').innerHTML = db.journal.length ? db.journal.slice(0,20).map(e=>`<div class="insight"><div class="muted">${new Date(e.at).toLocaleString([], {dateStyle:'medium', timeStyle:'short'})}</div><b>${esc(e.thought)}</b>${e.against?`<br>Other side: ${esc(e.against)}`:''}${e.friend?`<br>To a friend: ${esc(e.friend)}`:''}</div>`).join('') : 'No entries yet.';
+}
+
+// ---------- settings & data ----------
+$('#s-target').value = db.settings.target;
+$('#s-theme').value = db.settings.theme || '';
+$('#s-target').addEventListener('change', e => { db.settings.target = clamp(+e.target.value||8,5,11); save(); renderToday(); });
+$('#s-theme').addEventListener('change', e => { db.settings.theme = e.target.value; save(); applyTheme(); });
+function download(name, text, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); }
+$('#d-export').addEventListener('click', () => download(`pulse-backup-${today}.json`, JSON.stringify(db,null,1), 'application/json'));
+$('#d-csv').addEventListener('click', () => {
+  const cols = ['date','sleep','sscore','hrv','rhr','recovery','mood','energy','anxiety','focus','meds','strain','note'];
+  const rows = Object.keys(db.days).sort().map(k => { const d=db.days[k]; return cols.map(c => { const v = c==='date'?k : c==='recovery'?(recovery(k)?.score??'') : (d[c]??''); return /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g,'""')}"` : v; }).join(','); });
+  download(`pulse-${today}.csv`, [cols.join(','), ...rows].join('\n'), 'text/csv');
+});
+$('#d-import').addEventListener('click', () => $('#d-file').click());
+$('#d-file').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try { const d = JSON.parse(await f.text()); if (!d.days) throw 0; db = Object.assign(load(), d); save(); init(); toast('Restored'); }
+  catch(err){ toast('That file is not a Pulse backup'); }
+  e.target.value='';
+});
+$('#d-wipe').addEventListener('click', () => {
+  if (!confirm('Delete ALL Pulse data on this device? This cannot be undone. Back up first if unsure.')) return;
+  try { localStorage.removeItem(KEY); } catch(e){}
+  db = load(); init(); toast('All data deleted');
+});
+
+function init(){ applyTheme(); fillForm(); renderToday(); renderTasks(); drawTimer(); $('#s-target').value=db.settings.target; $('#s-theme').value=db.settings.theme||''; }
+init();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+})();
+</script>
+</body>
+</html>
